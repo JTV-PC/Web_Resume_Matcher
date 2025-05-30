@@ -20,6 +20,8 @@ langchain-groq = "*"
 sentence-transformers = "*"
 frontend = "*"
 python-dotenv = "*"
+pyqt5 = "*"
+pymupdf = "*"
 
 [dev-packages]
 
