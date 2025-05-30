@@ -1,3 +1,5 @@
+#GUI
+
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QFileDialog, QPushButton, QTextEdit, QVBoxLayout
 )
