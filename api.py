@@ -83,30 +83,57 @@ def get_score_by_name(name: str,conn=Depends(get_db)):
     
 
 
-@app.post("/evaluate_batch")
-async def evaluate_batch(
-    jd: UploadFile = File(...),
-    resumes: List[UploadFile] = File(...)
-):
-    # Prepare temp folders
-    os.makedirs("temp/jd", exist_ok=True)
-    os.makedirs("temp/resumes", exist_ok=True)
+# @app.post("/evaluate_batch")
+# async def evaluate_batch(
+#     jd: UploadFile = File(...),
+#     resumes: List[UploadFile] = File(...)
+# ):
+#     # Prepare temp folders
+#     os.makedirs("temp/jd", exist_ok=True)
+#     os.makedirs("temp/resumes", exist_ok=True)
 
-    # Save JD file
+#     # Save JD file
+#     jd_path = f"temp/jd/{jd.filename}"
+#     with open(jd_path, "wb") as f:
+#         shutil.copyfileobj(jd.file, f)
+
+#     # Save all resumes
+#     resume_folder = "temp/resumes"
+#     for resume in resumes:
+#         resume_path = os.path.join(resume_folder, resume.filename)
+#         with open(resume_path, "wb") as f:
+#             shutil.copyfileobj(resume.file, f)
+
+#     try:
+#         matcher = ResumeMatcherCore()
+#         result = matcher.run(jd_path, resume_folder)
+#         return JSONResponse(content=result)
+#     except Exception as e:
+#         return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+
+@app.post("/evaluate_batch")
+async def evaluate_pair(
+    jd: UploadFile = File(...),
+    resume: UploadFile = File(...)
+):
+    os.makedirs("temp/jd", exist_ok=True)
+    os.makedirs("temp/resume", exist_ok=True)
+
+    # Save JD
     jd_path = f"temp/jd/{jd.filename}"
     with open(jd_path, "wb") as f:
         shutil.copyfileobj(jd.file, f)
 
-    # Save all resumes
-    resume_folder = "temp/resumes"
-    for resume in resumes:
-        resume_path = os.path.join(resume_folder, resume.filename)
-        with open(resume_path, "wb") as f:
-            shutil.copyfileobj(resume.file, f)
+    # Save Resume
+    resume_path = f"temp/resume/{resume.filename}"
+    with open(resume_path, "wb") as f:
+        shutil.copyfileobj(resume.file, f)
 
     try:
         matcher = ResumeMatcherCore()
-        result = matcher.run(jd_path, resume_folder)
+        result = matcher.run_single(jd_path, resume_path)
         return JSONResponse(content=result)
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
