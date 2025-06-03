@@ -23,6 +23,8 @@ python-dotenv = "*"
 pyqt5 = "*"
 pymupdf = "*"
 fastapi = "*"
+pydantic = "*"
+psycopg2-binary = "*"
 
 [dev-packages]
 
