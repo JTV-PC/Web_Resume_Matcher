@@ -1,7 +1,6 @@
 import os
 import json
 import re
-
 from crewai import Agent
 from groq_llm import GroqLLM
 from utils import extract_text
@@ -28,18 +27,23 @@ class ResumeMatcherCore:
             llm=self.llm
         )
 
+
     def try_fix_json(self, raw_str):
-        cleaned = re.sub(r"```json|```", "", raw_str, flags=re.IGNORECASE).strip()
-        cleaned = re.sub(r",(\s*[}\]])", r"\1", cleaned)
-        cleaned = re.sub(r'("[-\w]+":\s*)(-?\d+(\.\d+)?|null|true|false)"', r'\1\2', cleaned)
-        cleaned = cleaned.replace('\n', ' ').replace('\t', ' ')
-        cleaned = re.sub(r'\s{2,}', ' ', cleaned)
+        try:
+            return json.loads(raw_str)
+        except json.JSONDecodeError:
+            pass
+
+        # Clean up common formatting issues
+        raw_str = re.sub(r"```(?:json)?|```", "", raw_str, flags=re.IGNORECASE).strip()
+        raw_str = re.sub(r'("score"\s*:\s*\d+)"', r'\1', raw_str)  # Fix quote after number
+        raw_str = re.sub(r',(\s*[}\]])', r'\1', raw_str)  # Remove trailing commas
+        raw_str = raw_str.replace('\n', ' ').replace('\t', ' ')
+        raw_str = re.sub(r'\s{2,}', ' ', raw_str)
 
         try:
-            return json.loads(cleaned)
+            return json.loads(raw_str)
         except json.JSONDecodeError as e:
-            print(f"[ERROR] JSON parsing failed after cleanup: {e}")
-            print(f"Cleaned JSON string:\n{cleaned}")
             return None
 
     def run(self, jd_file, resume_folder):
@@ -60,11 +64,13 @@ class ResumeMatcherCore:
                 "Output only a clean and valid JSON object. "
                 "Do not include markdown formatting (like ```json). "
                 "Do not include explanations or extra text before or after the JSON. "
-                "Use JSON format. Ensure that all brackets, quotes, and commas are properly placed. Do not place objects inside arrays unless they are properly nested."
+                "Use JSON format. Ensure that all brackets, quotes, and commas are properly placed. "
+                "Do not place objects inside arrays unless they are properly nested. "
                 "Make sure the 'name' field contains the candidate's full name. "
                 "Return the name of the university also along with the degree of the candidate. "
-                "Avoid duplicate keys. Ensure each section (e.g., soft_skills, certifications, analysis) appears only once and is correctly structured. "
-                "Return only the JSON object."
+                "Avoid duplicate keys. Ensure each section (e.g., soft_skills, certifications, analysis) "
+                "appears only once and is correctly structured. "
+                "Return only the JSON object. "
                 "Please analyze and score this candidate as per the criteria in the system prompt. "
                 "Return a detailed JSON with score components, red flags, bonus points, and analysis."
             )
@@ -72,26 +78,24 @@ class ResumeMatcherCore:
             try:
                 llm_response = self.llm._call(prompt)
             except Exception as e:
-                error_data = {
+                output.append({
                     "filename": file,
                     "score_data": {
                         "error": f"[ERROR] LLM call failed: {e}"
                     }
-                }
-                output.append(error_data)
+                })
                 continue
 
             score_data = self.try_fix_json(llm_response)
 
             if score_data is None:
-                error_data = {
+                output.append({
                     "filename": file,
                     "score_data": {
-                        "error": f"[ERROR] Failed to parse JSON.",
+                        "error": "[ERROR] Failed to parse JSON.",
                         "raw_response": llm_response
                     }
-                }
-                output.append(error_data)
+                })
                 continue
 
             output.append({

@@ -1,17 +1,18 @@
-#GUI
-
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QFileDialog, QPushButton, QTextEdit, QVBoxLayout
 )
 from matcher import ResumeMatcherCore
 import json
-import csv
+import psycopg2
+
 
 class ResumeMatcherGUI(QWidget):
     def __init__(self):
         super().__init__()
         self.matcher = ResumeMatcherCore()
         self.results = []
+        self.jd_path = None
+        self.resume_folder = None
         self.initUI()
 
     def initUI(self):
@@ -30,8 +31,8 @@ class ResumeMatcherGUI(QWidget):
         self.btn_run.clicked.connect(self.run_matching)
         self.layout.addWidget(self.btn_run)
 
-        self.btn_export = QPushButton("Export Results to CSV")
-        self.btn_export.clicked.connect(self.export_to_csv)
+        self.btn_export = QPushButton("Export Results to PostgreSQL")
+        self.btn_export.clicked.connect(self.export_to_postgres)
         self.layout.addWidget(self.btn_export)
 
         self.text_output = QTextEdit()
@@ -39,31 +40,24 @@ class ResumeMatcherGUI(QWidget):
 
         self.setLayout(self.layout)
 
-        self.jd_path = None
-        self.resume_folder = None
-
     def load_job_description(self):
         fname, _ = QFileDialog.getOpenFileName(self, "Select Job Description", "", "Text Files (*.txt *.pdf *.docx)")
         if fname:
             self.jd_path = fname
             self.text_output.append(f"Loaded Job Description: {fname}")
-            print(f"Loaded Job Description: {fname}")
 
     def load_resume_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Resume Folder")
         if folder:
             self.resume_folder = folder
             self.text_output.append(f"Loaded Resume Folder: {folder}")
-            print(f"Loaded Resume Folder: {folder}")
 
     def run_matching(self):
         if not self.jd_path or not self.resume_folder:
             self.text_output.append("Please load both job description and resume folder first.")
-            print("Please load both job description and resume folder first.")
             return
 
         self.text_output.append("Running matching, please wait...")
-        print("Running matching, please wait...")
         self.results = self.matcher.run(self.jd_path, self.resume_folder)
 
         for res in self.results:
@@ -74,69 +68,108 @@ class ResumeMatcherGUI(QWidget):
                 if "raw_response" in data:
                     output_text += f"\nRaw LLM Response:\n{data['raw_response']}"
                 self.text_output.append(output_text)
-                print(output_text)
             else:
                 try:
                     pretty_json = json.dumps(data, indent=2)
                     output_text = f"{file} => Full Analysis:\n{pretty_json}"
                     self.text_output.append(output_text)
-                    print(output_text)
                 except Exception as e:
                     output_text = f"{file} => Could not format output: {str(e)}"
                     self.text_output.append(output_text)
-                    print(output_text)
 
-    def export_to_csv(self):
+    def export_to_postgres(self):
         if not self.results:
             self.text_output.append("No results to export. Please run matching first.")
             return
 
-        path, _ = QFileDialog.getSaveFileName(self, "Save CSV File", "", "CSV Files (*.csv)")
-        if not path:
-            return
+        success = self.insert_into_postgres(self.results)
 
-        headers = [
-            "Filename", "Name", "Final Score", "Experience (Years)", "Experience Field",
-            "Technical Skills", "Soft Skills", "Strengths", "Weaknesses", "Suggestions"
-        ]
+        if success:
+            self.text_output.append("Successfully inserted results into PostgreSQL.")
+        else:
+            self.text_output.append("Failed to insert results into PostgreSQL.")
+
+    def insert_into_postgres(self, results):
+        db_config = {
+            "dbname": "Resume_JD",
+            "user": "postgres",
+            "password": "admin",
+            "host": "localhost",
+            "port": 5433
+        }
 
         try:
-            with open(path, mode='w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
+            conn = psycopg2.connect(**db_config)
+            cursor = conn.cursor()
 
-                for res in self.results:
-                    filename = res.get("filename", "")
-                    data = res.get("score_data", {})
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS resume_analysis (
+                name TEXT,
+                final_score FLOAT,
+                technical_skills_score FLOAT,
+                technical_skills TEXT,
+                experience_score FLOAT,
+                experience TEXT,
+                education_score FLOAT,
+                education TEXT,
+                soft_skills_score FLOAT,
+                soft_skills TEXT,
+                certifications_score FLOAT,
+                certifications TEXT,
+                strengths TEXT,
+                weaknesses TEXT,
+                suggestions TEXT
+            );
+            """)
 
-                    name = data.get("name", "")
-                    score_value = data.get("score", {}).get("value", "")
-                    experience = data.get("score", {}).get("components", {}).get("experience", {})
-                    exp_years = experience.get("years", "")
-                    exp_field = experience.get("field", "")
+            for res in results:
+                data = res.get("score_data", {})
+                print(data)
+                if "error" in data:
+                    continue
 
-                    technical_skills = ", ".join(data.get("score", {}).get("components", {}).get("technical_skills", {}).get("matched", []))
-                    soft_skills = ", ".join(data.get("score", {}).get("components", {}).get("soft_skills", {}).get("matched", []))
+                name = data.get("name", "")
+                score = data.get("score", {})
+                components = score.get("components", {})
 
-                    analysis = data.get("analysis", {})
-                    strengths = ", ".join(analysis.get("strengths", []))
-                    weaknesses = ", ".join(analysis.get("weaknesses", []))
-                    suggestions = ", ".join(analysis.get("suggestions", []))
+                row = (
+                    name,
+                    score.get("value", 0.0),
+                    components.get("technical_skills", {}).get("score", 0.0),
+                    ", ".join(components.get("technical_skills", {}).get("matched", [])),
+                    components.get("experience", {}).get("score", 0.0),
+                    components.get("experience", {}).get("field", ""),
+                    components.get("education", {}).get("score", 0.0),
+                    components.get("education", {}).get("matched", ""),
+                    components.get("soft_skills", {}).get("score", 0.0),
+                    ", ".join(components.get("soft_skills", {}).get("matched", [])),
+                    components.get("certifications", {}).get("score", 0.0),
+                    ", ".join(components.get("certifications", {}).get("matched", [])),
+                    ", ".join(data.get("analysis", {}).get("strengths", [])),
+                    ", ".join(data.get("analysis", {}).get("weaknesses", [])),
+                    ", ".join(data.get("analysis", {}).get("suggestions", [])),
+                )
 
-                    row = [
-                        filename, name, score_value, exp_years, exp_field,
-                        technical_skills, soft_skills, strengths, weaknesses, suggestions
-                    ]
-                    writer.writerow(row)
+                cursor.execute("""
+                    INSERT INTO resume_analysis (
+                        name, final_score, technical_skills_score, technical_skills,
+                        experience_score, experience, education_score, education,
+                        soft_skills_score, soft_skills, certifications_score, certifications,
+                        strengths, weaknesses, suggestions
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+                """, row)
 
-            self.text_output.append(f"Exported results to CSV at: {path}")
-            print(f"Exported results to CSV at: {path}")
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return True
 
         except Exception as e:
-            self.text_output.append(f"Error exporting to CSV: {e}")
-            print(f"Error exporting to CSV: {e}")
+            print("DB Error:", e)
+            return False
 
-# This part is essential for launching the GUI
+
+# Launch the GUI
 if __name__ == "__main__":
     import sys
     app = QApplication(sys.argv)

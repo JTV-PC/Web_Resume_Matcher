@@ -271,4 +271,46 @@ class GroqLLM(LLM):
 
         return len(text.split())
 
- 
+
+
+#Gemini LLM
+# class GroqLLM(LLM):
+#     model: str = "models/gemini-2.0-flash"
+#     temperature: float = 0.5
+
+#     def _call(self, prompt: str, stop=None, run_manager=None) -> str:
+#         headers = {
+#             "Content-Type": "application/json",
+#             "x-goog-api-key": os.environ["GEMINI_API_KEY"]
+#         }
+
+#         payload = {
+#             "contents": [
+#                 {
+#                     "role": "user",
+#                     "parts": [
+#                         {"text": f"{SYSTEM_PROMPT}\n\n{prompt}"}
+#                     ]
+#                 }
+#             ],
+#             "generationConfig": {
+#                 "temperature": self.temperature,
+#                 "topK": 1,
+#                 "topP": 1.0,
+#                 "maxOutputTokens": 2048
+#             }
+#         }
+
+#         url = f"https://generativelanguage.googleapis.com/v1beta/{self.model}:generateContent"
+
+#         response = requests.post(url, headers=headers, json=payload)
+#         response.raise_for_status()
+
+#         return response.json()["candidates"][0]["content"]["parts"][0]["text"]
+
+#     @property
+#     def _llm_type(self) -> str:
+#         return "custom-gemini"
+
+#     def get_num_tokens(self, text: str) -> int:
+#         return len(text.split()) 
