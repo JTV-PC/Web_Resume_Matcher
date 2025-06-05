@@ -59,6 +59,7 @@ class ResumeMatcherGUI(QWidget):
 
         self.text_output.append("Running matching, please wait...")
         self.results = self.matcher.run(self.jd_path, self.resume_folder)
+        # print("HELLO",self.results)
 
         for res in self.results:
             file = res["filename"]

@@ -221,22 +221,6 @@ Bonus Points (Max +5):
 
 }
 
-
- "Output only a clean and valid JSON object. "
-            "Do not include markdown formatting (like ```json). "
-            "Do not include explanations or extra text before or after the JSON. "
-            "Use JSON format. Ensure that all brackets, quotes, and commas are properly placed. "
-            "Do not place objects inside arrays unless they are properly nested. "
-            "Make sure the 'name' field contains the candidate's full name. "
-            "Return the name of the university also along with the degree of the candidate. "
-            "Avoid duplicate keys. Ensure each section (e.g., soft_skills, certifications, analysis) "
-            "appears only once and is correctly structured. "
-            "Return only the JSON object. "
-            "Please analyze and score this candidate as per the criteria in the system prompt. "
-            "Return a detailed JSON with score components, red flags, bonus points, and analysis."
-            ""Ensure the JSON output does not contain escaped characters like \\n, \\\\, or \\/. The response must be plain, readable JSON with standard characters only."
-"
-
 """
  
 class GroqLLM(LLM):
@@ -284,6 +268,71 @@ class GroqLLM(LLM):
     def get_num_tokens(self, text: str) -> int:
 
         return len(text.split())
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
