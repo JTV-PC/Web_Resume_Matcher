@@ -1,272 +1,19 @@
-# import os
-# import json
-# import re
-# import psycopg2
-# from crewai import Agent
-# from groq_llm import GroqLLM
-# from utils import extract_text
-# from dotenv import load_dotenv
-
-# load_dotenv()
-
-# class ResumeMatcherCore:
-#     def __init__(self):
-#         self.llm = GroqLLM(api_key=os.getenv("GROQ_API_KEY"))
-
-#         self.job_parser_agent = Agent(
-#             role="JobParser",
-#             goal="Extract key requirements and structured info from the job description.",
-#             backstory="Expert in job analysis and recruitment strategy.",
-#             llm=self.llm
-#         )
-
-#         self.resume_analyzer_agent = Agent(
-#             role="ResumeAnalyzer",
-#             goal="Evaluate resumes against job description using transparent scoring per system prompt.",
-#             backstory="Expert in resume parsing and hiring best practices.",
-#             llm=self.llm
-#         )
-
-#     def fix_json_issues(self, raw_str: str) -> str:
-#         # print("Raw string before fix:\n", raw_str)
-#         return raw_str.strip()
-
-#     def run_single(self, jd_file, resume_file):
-#         job_text = extract_text(jd_file)
-#         resume_text = extract_text(resume_file)
-
-#         prompt = (
-#             "SYSTEM PROMPT: Use the system prompt embedded in GroqLLM. "
-#             f"Job Description: {job_text} "
-#             f"Candidate Resume: {resume_text} "
-#             "Ensure the JSON output does not contain escaped characters like \\n, \\\\, or \\/. "
-#             "The response must be plain, readable JSON with standard characters only. "
-#             "Output only a clean and valid JSON object. "
-#             "Do not include markdown formatting (like ```json). "
-#             "Do not include explanations or extra text before or after the JSON. "
-#             "Ensure all brackets, quotes, and commas are properly placed. "
-#             "Make sure the 'name' field contains the candidate's full name. "
-#             "Return the name of the university along with the degree of the candidate. "
-#             "Avoid duplicate keys. Ensure each section (e.g., soft_skills, certifications, analysis) "
-#             "appears only once and is correctly structured. "
-#             "Return only the JSON object. "
-#             "Please analyze and score this candidate as per the criteria in the system prompt. "
-#             "Return a detailed JSON with score components, red flags, bonus points, and analysis."
-#         )
-
-#         try:
-#             llm_response = self.llm._call(prompt)
-#         except Exception as e:
-#             return {
-#                 "filename": os.path.basename(resume_file),
-#                 "score_data": {
-#                     "error": f"[ERROR] LLM call failed: {e}"
-#                 }
-#             }
-
-#         print(llm_response)
-#         fixed_raw = self.fix_json_issues(llm_response)
-
-#         try:
-#             parsed = json.loads(fixed_raw)
-
-#             result_obj = {
-#                 "filename": os.path.basename(resume_file),
-#                 "score_data": parsed
-#             }
-
-#             # INSERT INTO POSTGRES HERE ✅
-#             insertion_success = self.insert_into_postgres([result_obj])
-#             if not insertion_success:
-#                 print("Warning: Insertion into DB failed.")
-
-#             return llm_response
-
-#         except Exception as e:
-#             print(f"[ERROR] Final JSON load failed: {e}")
-#             return {
-#                 "filename": os.path.basename(resume_file),
-#                 "score_data": {
-#                     "error": "[ERROR] Could not parse JSON",
-#                     "raw": fixed_raw
-#                 }
-#             }
-
-#     def insert_into_postgres(self, results):
-#         db_config = {
-#             "dbname": "Resume_JD",
-#             "user": "postgres",
-#             "password": "admin",
-#             "host": "localhost",
-#             "port": 5433
-#         }
-
-#         try:
-#             conn = psycopg2.connect(**db_config)
-#             cursor = conn.cursor()
-
-#             cursor.execute("""
-#             CREATE TABLE IF NOT EXISTS resume_analysis (
-#                 name TEXT,
-#                 final_score FLOAT,
-#                 technical_skills_score FLOAT,
-#                 technical_skills TEXT,
-#                 experience_score FLOAT,
-#                 experience TEXT,
-#                 education_score FLOAT,
-#                 education TEXT,
-#                 soft_skills_score FLOAT,
-#                 soft_skills TEXT,
-#                 certifications_score FLOAT,
-#                 certifications TEXT,
-#                 strengths TEXT,
-#                 weaknesses TEXT,
-#                 suggestions TEXT
-#             );
-#             """)
-
-#             for res in results:
-#                 data = res.get("score_data", {})
-#                 if "error" in data:
-#                     continue
-
-#                 name = data.get("name", "")
-#                 score = data.get("score", {})
-#                 components = score.get("components", {})
-
-#                 row = (
-#                     name,
-#                     score.get("value", 0.0),
-#                     components.get("technical_skills", {}).get("score", 0.0),
-#                     ", ".join(components.get("technical_skills", {}).get("matched", [])),
-#                     components.get("experience", {}).get("score", 0.0),
-#                     components.get("experience", {}).get("field", ""),
-#                     components.get("education", {}).get("score", 0.0),
-#                     components.get("education", {}).get("degree", ""),
-#                     components.get("soft_skills", {}).get("score", 0.0),
-#                     ", ".join(components.get("soft_skills", {}).get("matched", [])),
-#                     components.get("certifications", {}).get("score", 0.0),
-#                     ", ".join(components.get("certifications", {}).get("items", [])),
-#                     ", ".join(data.get("analysis", {}).get("strengths", [])),
-#                     ", ".join(data.get("analysis", {}).get("weaknesses", [])),
-#                     ", ".join(data.get("analysis", {}).get("suggestions", [])),
-#                 )
-
-#                 print("Inserting row into DB:", row)
-
-#                 cursor.execute("""
-#                     INSERT INTO resume_analysis (
-#                         name, final_score, technical_skills_score, technical_skills,
-#                         experience_score, experience, education_score, education,
-#                         soft_skills_score, soft_skills, certifications_score, certifications,
-#                         strengths, weaknesses, suggestions
-#                     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
-#                 """, row)
-
-#             conn.commit()
-#             cursor.close()
-#             conn.close()
-#             return True
-
-#         except Exception as e:
-#             print("[DB Error]", e)
-#             return False
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import os
 import json
+import re
+import time
+import threading
 import psycopg2
 from crewai import Agent
 from groq_llm import GroqLLM
 from utils import extract_text
 from dotenv import load_dotenv
-
+import uuid
 load_dotenv()
 
 class ResumeMatcherCore:
     def __init__(self):
-        self.llm = GroqLLM(api_key=os.getenv("GROQ_API_KEY"))
+        self.llm = GroqLLM(api_key=os.getenv("GEMINI_API_KEY"))
         self.db_config = {
             "dbname": "Resume_JD",
             "user": "postgres",
@@ -298,7 +45,10 @@ class ResumeMatcherCore:
 
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS resume_analysis (
+                    id uuid unique,
                     name TEXT,
+                    email TEXT,
+                    contact_no TEXT,
                     final_score FLOAT,
                     technical_skills_score FLOAT,
                     technical_skills TEXT,
@@ -331,7 +81,27 @@ class ResumeMatcherCore:
             print("DB Init Error:", e)
 
     def fix_json_issues(self, raw_str: str) -> str:
-        return raw_str.strip()
+        raw_str = raw_str.strip()
+
+        # Remove markdown code block if present
+        raw_str = re.sub(r"^```json\s*", "", raw_str)
+        raw_str = re.sub(r"\s*```$", "", raw_str)
+
+        # Fix "matched": [... "missing": []] → separate matched and missing keys
+        raw_str = re.sub(
+            r'"matched": \[(.*?)\](\s*),\s*"missing": \[\]',
+            r'"matched": [\1], "missing": []',
+            raw_str,
+            flags=re.DOTALL
+        )
+
+        # Fix "score": 43" → remove erroneous quote
+        raw_str = re.sub(r'("score"\s*:\s*\d+)"', r'\1', raw_str)
+
+        # Remove any trailing commas before closing brackets
+        raw_str = re.sub(r',\s*([\]}])', r'\1', raw_str)
+
+        return raw_str
 
     def insert_into_db(self, result):
         try:
@@ -339,22 +109,30 @@ class ResumeMatcherCore:
             cursor = conn.cursor()
             data = result.get("score_data", {})
             name = data.get("name", "")
+            email = data.get("email", "")
+            contact_no = data.get("contact no", "")  # Note the space in the key
+            record_id = str(uuid.uuid4())
             score = data.get("score", {})
             components = score.get("components", {})
-
             row = (
+                record_id,
                 name,
+                email,
+                contact_no,
                 score.get("value", 0.0),
                 components.get("technical_skills", {}).get("score", 0.0),
-                ", ".join(components.get("technical_skills", {}).get("matched", [])),
+                ", ".join(skill.get("skill", "") if isinstance(skill, dict) else str(skill)
+                        for skill in components.get("technical_skills", {}).get("matched", [])),
                 components.get("experience", {}).get("score", 0.0),
                 components.get("experience", {}).get("field", ""),
                 components.get("education", {}).get("score", 0.0),
                 components.get("education", {}).get("degree", ""),
                 components.get("soft_skills", {}).get("score", 0.0),
-                ", ".join(components.get("soft_skills", {}).get("matched", [])),
+                ", ".join(skill.get("skill", "") if isinstance(skill, dict) else str(skill)
+                        for skill in components.get("soft_skills", {}).get("matched", [])),
                 components.get("certifications", {}).get("score", 0.0),
-                ", ".join(components.get("certifications", {}).get("items", [])),
+                ", ".join(cert.get("name", "") if isinstance(cert, dict) else str(cert)
+                        for cert in components.get("certifications", {}).get("items", [])),
                 ", ".join(data.get("analysis", {}).get("strengths", [])),
                 ", ".join(data.get("analysis", {}).get("weaknesses", [])),
                 ", ".join(data.get("analysis", {}).get("suggestions", [])),
@@ -362,11 +140,12 @@ class ResumeMatcherCore:
 
             cursor.execute("""
                 INSERT INTO resume_analysis (
-                    name, final_score, technical_skills_score, technical_skills,
+                    id, name, email, contact_no, final_score, 
+                    technical_skills_score, technical_skills,
                     experience_score, experience, education_score, education,
                     soft_skills_score, soft_skills, certifications_score, certifications,
                     strengths, weaknesses, suggestions
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
             """, row)
 
             cursor.execute("DELETE FROM resume_parse_errors WHERE filename = %s;", (result["filename"],))
@@ -401,13 +180,13 @@ class ResumeMatcherCore:
         resume_text = extract_text(resume_file)
 
         prompt = (
- "SYSTEM PROMPT: Use the system prompt embedded in GroqLLM. "
+           "SYSTEM PROMPT: Use the system prompt embedded in GroqLLM. "
             f"Job Description: {job_text} "
             f"Candidate Resume: {resume_text} "
             "Ensure the JSON output does not contain escaped characters like \\n, \\\\, or \\/. "
             "The response must be plain, readable JSON with standard characters only. "
             "Output only a clean and valid JSON object. "
-            "Do not include markdown formatting (like ```json). "
+            "Do not include markdown formatting (like json). "
             "Do not include explanations or extra text before or after the JSON. "
             "Ensure all brackets, quotes, and commas are properly placed. "
             "Make sure the 'name' field contains the candidate's full name. "
@@ -417,6 +196,7 @@ class ResumeMatcherCore:
             "Return only the JSON object. "
             "Please analyze and score this candidate as per the criteria in the system prompt. "
             "Return a detailed JSON with score components, red flags, bonus points, and analysis."
+        
         )
 
         try:
@@ -440,7 +220,6 @@ class ResumeMatcherCore:
             self.insert_into_db(result)
             return result
         except Exception as e:
-            print(f"[ERROR] Final JSON load failed: {e}")
             raw_name = os.path.basename(resume_file)
             self.log_parse_error(raw_name, fixed_raw)
             return {
@@ -451,12 +230,24 @@ class ResumeMatcherCore:
                 }
             }
 
-    def run_batch(self, jd_file, resume_folder):
-        from glob import glob
-        resume_paths = glob(os.path.join(resume_folder, "*"))
-        results = []
-        for resume_path in resume_paths:
-            print(f"Evaluating: {resume_path}")
-            result = self.run_single(jd_file, resume_path)
-            results.append(result)
-        return results
+    def run_background_retry(self, jd_path, folder="uploads"):
+        def retry_loop():
+            print("Background retry thread started...")
+            while True:
+                try:
+                    conn = psycopg2.connect(**self.db_config)
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT filename FROM resume_parse_errors;")
+                    rows = cursor.fetchall()
+                    for (filename,) in rows:
+                        resume_path = os.path.join(folder, filename)
+                        if os.path.exists(resume_path):
+                            self.run_single(jd_path, resume_path)
+                    cursor.close()
+                    conn.close()
+                except Exception as e:
+                    print(f"Retry loop error: {e}")
+                time.sleep(60)  # Retry every 60 seconds
+
+        thread = threading.Thread(target=retry_loop, daemon=True)
+        thread.start()

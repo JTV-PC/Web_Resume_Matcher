@@ -185,6 +185,10 @@ Bonus Points (Max +5):
 
   "name": "Extract only the first and last name.",
 
+  "email": Extract the Email address of the candidate from the resume
+
+  "contact no:" Extract the contact number in the resume
+
   "score": {
 
     "value": 0-100,
@@ -223,157 +227,94 @@ Bonus Points (Max +5):
 
 """
  
-class GroqLLM(LLM):
-
-    model: str = "llama3-70b-8192"
-    temperature: float = 0.5 
-    def _call(self, prompt: str, stop=None, run_manager=None) -> str:
-
-        headers = {
-
-            "Authorization": f"Bearer {os.environ['GROQ_API_KEY']}",
-            "Content-Type": "application/json",
-
-        }
- 
-        payload = {
-
-            "model": self.model,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": self.temperature,
-        }
-        response = requests.post(
-
-            "https://api.groq.com/openai/v1/chat/completions",
-
-            json=payload,
-
-            headers=headers,
-
-        )
- 
-        response.raise_for_status()
-
-        return response.json()["choices"][0]["message"]["content"]
- 
-    @property
-
-    def _llm_type(self) -> str:
-
-        return "custom-groq"
- 
-    def get_num_tokens(self, text: str) -> int:
-
-        return len(text.split())
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#Gemini LLM
 # class GroqLLM(LLM):
-#     model: str = "models/gemini-2.0-flash"
-#     temperature: float = 0.5
 
+#     model: str = "llama3-70b-8192"
+#     temperature: float = 0.5 
 #     def _call(self, prompt: str, stop=None, run_manager=None) -> str:
+
 #         headers = {
+
+#             "Authorization": f"Bearer {os.environ['GROQ_API_KEY']}",
 #             "Content-Type": "application/json",
-#             "x-goog-api-key": os.environ["GEMINI_API_KEY"]
-#         }
 
+#         }
+ 
 #         payload = {
-#             "contents": [
-#                 {
-#                     "role": "user",
-#                     "parts": [
-#                         {"text": f"{SYSTEM_PROMPT}\n\n{prompt}"}
-#                     ]
-#                 }
+
+#             "model": self.model,
+#             "messages": [
+#                 {"role": "system", "content": SYSTEM_PROMPT},
+#                 {"role": "user", "content": prompt}
 #             ],
-#             "generationConfig": {
-#                 "temperature": self.temperature,
-#                 "topK": 1,
-#                 "topP": 1.0,
-#                 "maxOutputTokens": 2048
-#             }
+#             "temperature": self.temperature,
 #         }
+#         response = requests.post(
 
-#         url = f"https://generativelanguage.googleapis.com/v1beta/{self.model}:generateContent"
+#             "https://api.groq.com/openai/v1/chat/completions",
 
-#         response = requests.post(url, headers=headers, json=payload)
+#             json=payload,
+
+#             headers=headers,
+
+#         )
+ 
 #         response.raise_for_status()
 
-#         return response.json()["candidates"][0]["content"]["parts"][0]["text"]
-
+#         return response.json()["choices"][0]["message"]["content"]
+ 
 #     @property
-#     def _llm_type(self) -> str:
-#         return "custom-gemini"
 
+#     def _llm_type(self) -> str:
+
+#         return "custom-groq"
+ 
 #     def get_num_tokens(self, text: str) -> int:
-#         return len(text.split()) 
+
+#         return len(text.split())
+
+
+
+
+
+# Gemini LLM
+class GroqLLM(LLM):
+    model: str = "models/gemini-2.0-flash"
+    temperature: float = 0.5
+
+    def _call(self, prompt: str, stop=None, run_manager=None) -> str:
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": os.environ["GEMINI_API_KEY"]
+        }
+
+        payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"text": f"{SYSTEM_PROMPT}\n\n{prompt}"}
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "temperature": self.temperature,
+                "topK": 1,
+                "topP": 1.0,
+                "maxOutputTokens": 2048
+            }
+        }
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/{self.model}:generateContent"
+
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+
+        return response.json()["candidates"][0]["content"]["parts"][0]["text"]
+
+    @property
+    def _llm_type(self) -> str:
+        return "custom-gemini"
+
+    def get_num_tokens(self, text: str) -> int:
+        return len(text.split()) 

@@ -20,6 +20,8 @@ app.add_middleware(
 
 class ResumeScore(BaseModel):
     name: str
+    email: str
+    contact_no: str
     final_score: float
     technical_skills_score: float
     experience_score: float
@@ -45,7 +47,12 @@ def get_db():
 def get_scores(conn=Depends(get_db)):
     try:
         with conn.cursor() as cursor:
-            cursor.execute("SELECT * FROM resume_analysis;")
+            cursor.execute("""
+                SELECT name, email, contact_no, final_score, 
+                       technical_skills_score, experience_score,
+                       education_score, soft_skills_score, certifications_score
+                FROM resume_analysis;
+            """)
             return cursor.fetchall()
     except Exception as e:
         return {"error": str(e)}
@@ -55,7 +62,8 @@ def get_score_by_name(name: str, conn=Depends(get_db)):
     try:
         with conn.cursor() as cursor:
             cursor.execute("""
-                SELECT name, final_score, technical_skills_score, experience_score,
+                SELECT name, email, contact_no, final_score, 
+                       technical_skills_score, experience_score,
                        education_score, soft_skills_score, certifications_score
                 FROM resume_analysis
                 WHERE name = %s;
@@ -66,6 +74,7 @@ def get_score_by_name(name: str, conn=Depends(get_db)):
             raise HTTPException(status_code=404, detail="Candidate not found")
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+    
 
 @app.post("/evaluate_batch")
 async def evaluate_batch(
@@ -108,9 +117,9 @@ def retry_failed_resumes():
         rows = cursor.fetchall()
 
         if not rows:
-            return {"message": "No failed resumes to retry."}
+            return {"message": "No failed resumes to retry."} 
 
-        jd_path = "temp/jd/job_description.pdf"
+        jd_path = "./uploads/{jd.filename}"
         results = []
 
         for (filename,) in rows:
@@ -125,5 +134,21 @@ def retry_failed_resumes():
 
         return {"retries_attempted": len(rows)}
 
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+
+@app.get("/get_resume_delta/", )
+def get_score_by_name(conn=Depends(get_db)):
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT * FROM resume_analysis;
+            """)
+            row = cursor.fetchall()
+            if row:
+                return row
+            raise HTTPException(status_code=404, detail="Candidate not found")
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
