@@ -111,7 +111,7 @@ class ResumeMatcherCore:
             name = data.get("name", "")
             email = data.get("email", "")
             contact_no = data.get("contact no", "")  # Note the space in the key
-            record_id = str(uuid.uuid4())
+            record_id = result.get("uuid","")
             score = data.get("score", {})
             components = score.get("components", {})
             row = (
@@ -175,7 +175,7 @@ class ResumeMatcherCore:
         except Exception as e:
             print("Error Logging Failed:", e)
 
-    def run_single(self, jd_file, resume_file):
+    def run_single(self, jd_file, resume_file,uuid):
         job_text = extract_text(jd_file)
         resume_text = extract_text(resume_file)
 
@@ -215,6 +215,7 @@ class ResumeMatcherCore:
             parsed = json.loads(fixed_raw)
             result = {
                 "filename": os.path.basename(resume_file),
+                "uuid":uuid,
                 "score_data": parsed
             }
             self.insert_into_db(result)
